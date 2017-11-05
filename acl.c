@@ -5,13 +5,28 @@
 #include <stdio.h>
 #include <sys/wait.h>
 
-// TODO: check all errno
-#define PERRNO err = errno; printf("%s: %s %d",argv[0],strerror(err),__LINE__);
-int err;
 const int buf_size = 512; /*limit of chars per line*/
+const char *pname; /*program name for errors*/
 
-char *allowed_dir(FILE *f){
+struct dirs{
+	int count;
+	char **dir;
+}
 
+// TODO: check all errno
+#define PERRNO print_error(__LINE__);
+
+void print_error(int linenum)
+{
+	int err = errno;
+	//TODO: try not to use porcelain
+	if(0 != strcmp(strerror(err),"Success"))
+		printf("%s: %s on line %d\n",pname,strerror(err),linenum);
+}
+
+
+struct dirs *allowed_dir(FILE *f)
+{
 	char *current_user = getenv("USER");
 	printf("  User: %s\n",current_user);
 	char buf[buf_size];
@@ -19,37 +34,31 @@ char *allowed_dir(FILE *f){
 	char *tmp, *cur,*usr,*dir;
 	/*
 	 * supposed format:
-	 * user|directory
+	 * user|directory|directory|...|
+	 *
+	 * Note the final '|'
 	 */
-	while((ch = fgetc(f)) != EOF){
-		ungetc(ch,f);
-		fgets(buf,buf_size,f);
-		// TODO: use strtok()
-		tmp = strchr(buf,'|');
-		if(!tmp)
+	while(fgets(buf,buf_size,f) != NULL){
+		// TODO: clean this logic
+		usr = strtok(buf,'|');
+		if(strcmp(usr,current_user) == 0)
 			break;
-		*tmp = '\0';
-		if(strcmp(buf,current_user) != 0)
-			continue;
-		break;
 	}
-	usr = malloc(tmp-buf+1);
-	cur = ++tmp;
-	strcpy(usr,buf);
-
+	//TODO: check fgets error
+	//TODO: if eof is reached user not found
 
 	tmp = strchr(cur,'\n');
 	if(!tmp)
 		return NULL;
 	*tmp = '\0';
 	dir = malloc(tmp-cur+1);
-	strcpy(dir,cur); 
-	free(usr); /*free dir later*/
-	return dir;
+	strcpy(dir,cur);
+	return dir;/*free dir later*/
 }
 
 /* Last item in cmd must be a (char*)NULL */
-FILE *run_sh(const char *cmd,char *const args[]){
+FILE *run_sh(const char *cmd,char *const args[])
+{
 	int filedes[2];
 
 	pipe(filedes);
@@ -73,16 +82,15 @@ FILE *run_sh(const char *cmd,char *const args[]){
 	}
 }
 
-char *cut_str(char* s, char c){
+char *cut_str(char* s, char c)
+{
 	char *t = strchr(s,c);
 	*t = '\0';
 	return t;
 }
 
-
-
-
-int is_allowed(const char *dir, char *rev_range){
+int is_allowed(const char *dir, char *rev_range)
+{
 
 	if(!strcmp(dir,"."))
 		return 1;
@@ -101,11 +109,10 @@ int is_allowed(const char *dir, char *rev_range){
 			cut_str(rev_buf,'\n');
 	char *arg_file[] = {"git", "log", "-1", "--name-only", "--pretty=format:'%s'", rev_buf, (char*)NULL};
 	/* char *arg_file[] = {"echo", "simple\nsrep\nsineapple", (char*)NULL}; */
-	FILE *file_list = run_sh(arg_file[0],arg_file); 
+	FILE *file_list = run_sh(arg_file[0],arg_file);
 	fgets(file_buf,buf_size,file_list);
 	cut_str(file_buf,'\n');
 	printf("  Check %s\n",file_buf);
-
 
 		while((ch = fgetc(file_list)) != EOF){
 			ungetc(ch,file_list);
@@ -125,16 +132,19 @@ int is_allowed(const char *dir, char *rev_range){
 	return allowed;
 }
 
-int main(int argc, char **argv){
-	char *f_name = "acl";
+int main(int argc, char **argv)
+{
+	pname = argv[0];
 
-	if(argc > 4){
-		puts("Usage: acl REF OLDREV NEWREV");
+	if(argc != 3){
+		printf("Usage: %s REF OLDREV NEWREV",pname);
 		PERRNO
 		return 1;
 	}
 
-	FILE *f = fopen(f_name, "r");
+	char *acl_file_name = "acl";
+
+	FILE *f = fopen(acl_file_name, "r");
 
 	if(!f){
 		PERRNO
@@ -146,7 +156,7 @@ int main(int argc, char **argv){
 	// TODO: find out the max length of a revision.
 	char rev_list[buf_size];
 	//TODO: check permission for creating or deleting a branch.
-	
+
 	const char empty[] = "0000000000000000000000000000000000000000";
 	if((strcmp(argv[2],empty) == 0)||(strcmp(argv[3],empty) == 0)){
 		printf("!!!Dangerously the branch!!!\n");
@@ -164,6 +174,6 @@ int main(int argc, char **argv){
 	printf("\n  Acl check Failed: files outside \"%s\"\n\n",dir);
 	printf("    If \"git rm\" FILE does not work try this:\n    https://help.github.com/articles/removing-sensitive-data-from-a-repository/\n");
 	free(dir);
-	return 1;
 
+	return 1;
 }
