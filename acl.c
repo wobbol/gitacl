@@ -8,7 +8,7 @@
 const int buf_size = 512; /*limit of chars per line*/
 const char *pname; /*program name for errors*/
 
-struct dirs{
+struct dirs {
 	int count;
 	char *dir[0];
 };
@@ -19,26 +19,28 @@ struct dirs{
 int print_error(int linenum)
 {
 	int err = errno;
-	if(0 != err){
-		printf("%s: %s on line %d\n",pname,strerror(err),linenum);
+	if(0 != err) {
+		printf("%s: %s on line %d\n", pname, strerror(err), linenum);
 		return 1;
 	}
 	return 0;
 }
 
-char *cut_str(char* s, char c)
+char *cut_str(char *s, char c)
 {
-	char *t = strchr(s,c);
+	char *t = strchr(s, c);
 	*t = '\0';
 	return t;
 }
 int fseek_usr_entry(char *c_user, FILE *f)
 {
 	long f_pos = ftell(f);
-	while(fgets(buf, buf_size, f) != NULL){
+	char buf[buf_size];
+	char *usr;
+	while(fgets(buf, buf_size, f) != NULL) {
 		// TODO: clean this logic
 		usr = strtok(buf, "|");
-		if(strcmp(usr, current_user) == 0){
+		if(strcmp(usr, c_user) == 0) {
 			break;
 		} else {
 			usr = NULL;
@@ -54,7 +56,7 @@ int fseek_usr_entry(char *c_user, FILE *f)
 struct dirs *allowed_dir(FILE *f)
 {
 	char *current_user = getenv("USER");
-	printf("  User: %s\n",current_user);
+	printf("  User: %s\n", current_user);
 	char ch = 0;
 	char *usr;
 	/*
@@ -63,7 +65,7 @@ struct dirs *allowed_dir(FILE *f)
 	 *
 	 * Note the final '|'
 	 */
-	if(!fseek_usr_entry(current_user, f)){
+	if(!fseek_usr_entry(current_user, f)) {
 		/* errors */
 	}
 
@@ -82,16 +84,16 @@ struct dirs *allowed_dir(FILE *f)
 	ret = malloc(sizeof(*ret) + sizeof(ret->dir) * dir_num);
 
 	char *dir = strtok(dir_list, "|");
-	do{
+	do {
 		int count = 0;
 
 		cut_str(dir, '\n');
 		ret->dir[count] = malloc(strlen(dir) + 1);
 		strcpy(ret->dir[count], dir);
 		ret->count = ++count;
-	} while((dir = strtok(NULL, "|")) != NULL)
+	} while((dir = strtok(NULL, "|")) != NULL);
 
-	return ret;/*free ret and friends later*/
+	return ret; /*free ret and friends later*/
 
 allowed_dir_fail:
 	ret = malloc(sizeof(*ret) + sizeof(ret->dir));
@@ -102,7 +104,7 @@ allowed_dir_fail:
 
 void free_dirs(struct dirs *const p)
 {
-	for(int i = 0; i < count; ++i){
+	for(int i = 0; i < p->count; ++i) {
 		free(p->dir[i]);
 		p->dir[i] = NULL;
 	}
@@ -117,19 +119,19 @@ FILE *run_sh(const char *cmd, char *const args[])
 	pipe(filedes);
 	pid_t pid = fork();
 
-	if(!pid){
+	if(!pid) {
 		close(filedes[0]);
-		dup2(filedes[1],1);
-		execvp(cmd,args);
+		dup2(filedes[1], 1);
+		execvp(cmd, args);
 		return NULL;
-	} else if(pid == -1){
+	} else if(pid == -1) {
 		close(filedes[0]);
 		close(filedes[1]);
 		//error
 		return NULL;
 	} else {
 		close(filedes[1]);
-		FILE *ret = fdopen(filedes[0],"r");
+		FILE *ret = fdopen(filedes[0], "r");
 		wait(NULL);
 		return ret;
 	}
@@ -137,8 +139,8 @@ FILE *run_sh(const char *cmd, char *const args[])
 
 int dir_match(const struct dirs *const list, const char *const str)
 {
-	for(int i = 0; i < list->count; ++i){
-		if(strcmp(list->dir[i],str) == 0)
+	for(int i = 0; i < list->count; ++i) {
+		if(strcmp(list->dir[i], str) == 0)
 			return 1;
 	}
 	return 0;
@@ -146,22 +148,23 @@ int dir_match(const struct dirs *const list, const char *const str)
 int is_dir_substr(const char *const str, const struct dirs *const list)
 {
 	int present = 0;
-	for(int i = 0; i < list->count; ++i){
-		if(strstr(str,list->dir[i]) == str){
+	for(int i = 0; i < list->count; ++i) {
+		if(strstr(str, list->dir[i]) == str) {
 			present = 1;
-		}else{
+		} else {
 			break;
 		}
 	}
 	return present;
 }
 
-FILE *git_filenames_in_rev(const int test, char *const revision){
+FILE *git_filenames_in_rev(const int test, char *const revision)
+{
 	char *cmd[7];
-	if(test){
+	if(test) {
 		cmd[0] = "echo";
-		cmd[1] =" simple\nsrep\nsineapple";
-		cmd[2] = (char*)NULL;
+		cmd[1] = " simple\nsrep\nsineapple";
+		cmd[2] = (char *)NULL;
 	} else {
 		cmd[0] = "git";
 		cmd[1] = "log";
@@ -169,34 +172,34 @@ FILE *git_filenames_in_rev(const int test, char *const revision){
 		cmd[3] = "--name-only";
 		cmd[4] = "--pretty=format:'%s'";
 		cmd[5] = revision;
-		cmd[6] = (char*)NULL;
+		cmd[6] = (char *)NULL;
 	}
 	return run_sh(cmd[0], cmd);
 }
 
 int is_allowed(const struct dirs *const dir_list, char *rev_range)
 {
-	if(dir_match(dir_list,"."))/*user has rights in whole repo*/
+	if(dir_match(dir_list, ".")) /*user has rights in whole repo*/
 		return 1;
-	char *arg_rev[] = {"git", "rev-list", rev_range, (char*)NULL};
-	FILE *rev_list = run_sh(arg_rev[0],arg_rev);
+	char *arg_rev[] = {"git", "rev-list", rev_range, (char *)NULL};
+	FILE *rev_list = run_sh(arg_rev[0], arg_rev);
 
 	char ch;
 
 	char rev_buf[buf_size];
 	int allowed = 1;
 
-	while(fgets(rev_buf,buf_size,rev_list) != NULL){
-		cut_str(rev_buf,'\n');
+	while(fgets(rev_buf, buf_size, rev_list) != NULL) {
+		cut_str(rev_buf, '\n');
 
 		FILE *file_list = git_filenames_in_rev(0, rev_buf);
 		char file_buf[buf_size];
 
-		while(fgets(file_buf,buf_size,file_list) != NULL){
-			cut_str(file_buf,'\n');
-			printf("  Check %s\n",file_buf);
+		while(fgets(file_buf, buf_size, file_list) != NULL) {
+			cut_str(file_buf, '\n');
+			printf("  Check %s\n", file_buf);
 
-			if(!is_dir_substr(file_buf,dir_list)){
+			if(!is_dir_substr(file_buf, dir_list)) {
 				allowed = 0;
 			}
 
@@ -221,8 +224,8 @@ int main(int argc, char **argv)
 {
 	pname = argv[0];
 
-	if(argc != 4){
-		printf("Usage: %s REF OLDREV NEWREV\n",pname);
+	if(argc != 4) {
+		printf("Usage: %s REF OLDREV NEWREV\n", pname);
 		IS_ERROR;
 		return 1;
 	}
@@ -231,7 +234,7 @@ int main(int argc, char **argv)
 
 	FILE *f = fopen(acl_file_name, "r");
 
-	if(!f){
+	if(!f) {
 		IS_ERROR;
 		return 1;
 	}
@@ -244,21 +247,21 @@ int main(int argc, char **argv)
 	// TODO: find out the max length of a revision.
 	//TODO: check permission for creating or deleting a branch.
 	const char empty[] = "0000000000000000000000000000000000000000";
-	if((strcmp(argv[2],empty) == 0)||(strcmp(argv[3],empty) == 0)){
+	if((strcmp(argv[2], empty) == 0) || (strcmp(argv[3], empty) == 0)) {
 		printf("!!!Dangerously the branch!!!\n");
 		return 0;
 	} else {
-	strcpy(rev_list,argv[2]);
-	strcat(rev_list,"..");
-	strcat(rev_list,argv[3]);
+		strcpy(rev_list, argv[2]);
+		strcat(rev_list, "..");
+		strcat(rev_list, argv[3]);
 	}
 
-	if(is_allowed(user_dirs,rev_list)){
+	if(is_allowed(user_dirs, rev_list)) {
 		free_dirs(user_dirs);
 		user_dirs = NULL;
 		return 0;
 	}
-	printf("\n  Acl check Failed: files outside \"%s\"\n\n","Placeholder");
+	printf("\n  Acl check Failed: files outside \"%s\"\n\n", "Placeholder");
 	printf("    If \"git rm\" FILE does not work try this:\n    https://help.github.com/articles/removing-sensitive-data-from-a-repository/\n");
 	free_dirs(user_dirs);
 	user_dirs = NULL;
