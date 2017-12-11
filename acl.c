@@ -78,7 +78,7 @@ struct dirs *allowed_dir(FILE *f)
 		goto allowed_dir_fail;
 
 	int dir_num = 0;
-	for(char *s = dir_list; s != NULL; s = strchr(s, '|') + 1)
+	for(char *s = dir_list; s != NULL; s = strchr(s + 1, '|'))
 		dir_num++;
 
 	ret = malloc(sizeof(*ret) + sizeof(ret->dir) * dir_num);
